@@ -32,14 +32,17 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Install changelog tools
-        run: npm install -g conventional-recommended-bump conventional-changelog-cli conventional-changelog-conventionalcommits
+      # Install changelog tools temporarily so presets resolve correctly
+      - name: Install changelog tools temporarily
+        run: npm install --no-save conventional-recommended-bump conventional-changelog-cli conventional-changelog-conventionalcommits
+
+      # Changelog tools will be invoked via npx -p to avoid global installs and preset resolution issues
 
       # Determine next version automatically
       - name: Determine next version
         id: bump
         run: |
-          RELEASE_TYPE=$(npx conventional-recommended-bump -p conventionalcommits || true)
+          RELEASE_TYPE=$(./node_modules/.bin/conventional-recommended-bump -p conventionalcommits || true)
           # If there are no conventional commits and this was manually triggered with force=true,
           # default to a patch bump. Otherwise skip.
           if [ -z "$RELEASE_TYPE" ] || [ "$RELEASE_TYPE" = "null" ]; then
@@ -93,7 +96,7 @@ jobs:
       - name: Generate latest changelog section
         id: changelog
         run: |
-          LATEST_CHANGELOG=$(npx conventional-changelog -p conventionalcommits -r 1)
+          LATEST_CHANGELOG=$(./node_modules/.bin/conventional-changelog -p conventionalcommits -r 1)
           echo "latest_changelog<<EOF" >> $GITHUB_OUTPUT
           echo "$LATEST_CHANGELOG" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
