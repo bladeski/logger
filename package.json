@@ -28,6 +28,11 @@
   ],
   "author": "Jonathan Blades",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bladeski/logger"
+  },
+  "homepage": "https://github.com/bladeski/logger#readme",
   "devDependencies": {
     "@types/jest": "^29.5.5",
     "@types/node": "^20.6.3",
