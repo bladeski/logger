@@ -1,0 +1,131 @@
+name: Tag, Release & Publish on Merge to Main
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Install changelog tools
+        run: npm install -g conventional-recommended-bump conventional-changelog-cli conventional-changelog-conventionalcommits
+
+      # Determine next version automatically
+      - name: Determine next version
+        id: bump
+        run: |
+          RELEASE_TYPE=$(npx conventional-recommended-bump -p conventionalcommits)
+          if [ -z "$RELEASE_TYPE" ] || [ "$RELEASE_TYPE" = "null" ]; then
+            echo "No conventional commits since last release. Skipping."
+            echo "release_needed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          CURRENT=$(node -p "require('./package.json').version")
+          IFS='.' read -r major minor patch <<< "$CURRENT"
+          case "$RELEASE_TYPE" in
+            major) major=$((major+1)); minor=0; patch=0 ;;
+            minor) minor=$((minor+1)); patch=0 ;;
+            patch) patch=$((patch+1)) ;;
+          esac
+          NEW_VERSION="$major.$minor.$patch"
+          npm version "$NEW_VERSION" --no-git-tag-version
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "release_needed=true" >> $GITHUB_OUTPUT
+
+      - name: Stop if no release needed
+        if: steps.bump.outputs.release_needed != 'true'
+        run: exit 0
+
+      - name: Setup Node.js for build and test
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build --if-present
+
+      - name: Run tests
+        run: npm test --if-present --silent
+
+      # Generate only the latest changelog section from commits since last tag
+      - name: Generate latest changelog section
+        id: changelog
+        run: |
+          LATEST_CHANGELOG=$(npx conventional-changelog -p conventionalcommits -r 1)
+          echo "latest_changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$LATEST_CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      # Prepend new section to existing file
+      - name: Prepend to CHANGELOG.md
+        run: |
+          NEW_CHANGELOG="${{ steps.changelog.outputs.latest_changelog }}"
+          if [ -f CHANGELOG.md ]; then
+            echo -e "$NEW_CHANGELOG\n$(cat CHANGELOG.md)" > CHANGELOG.md
+          else
+            echo -e "$NEW_CHANGELOG" > CHANGELOG.md
+          fi
+
+      # Commit and tag
+      - name: Commit and tag
+        run: |
+          git add package.json package-lock.json CHANGELOG.md
+          git commit -m "chore(release): v${{ steps.bump.outputs.new_version }}"
+          git tag v${{ steps.bump.outputs.new_version }}
+
+      - name: Push commit and tag
+        run: git push origin main --follow-tags
+
+      # Use the latest section as release notes
+      - name: Extract release notes
+        id: notes
+        run: |
+          echo "release_notes<<EOF" >> $GITHUB_OUTPUT
+          echo "${{ steps.changelog.outputs.latest_changelog }}" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.bump.outputs.new_version }}
+          name: Release v${{ steps.bump.outputs.new_version }}
+          body: ${{ steps.notes.outputs.release_notes }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Ensure npm registry
+        run: npm config set registry https://registry.npmjs.org/
+
+      - name: Update npm
+        run: npm install -g npm@latest
+
+      - name: Publish to npm (Trusted Publishing)
+        run: npm publish --access public
