@@ -1,8 +1,8 @@
-# Blades Logger
+# Logger
 
 A small, pluggable TypeScript logging utility intended for browser and test environments. It provides a singleton `LoggingService` with multiple log levels, pluggable core loggers (console, localStorage, in-memory), and an easy way to add custom core loggers.
 
-This README documents the public API, initialization options, migration notes (legacy `configure()`), and developer commands used in this repository.
+This README documents the public API, initialization options and developer commands used in this repository.
 
 ## Highlights
 
@@ -23,7 +23,7 @@ Clone and install dev dependencies:
 
 ```powershell
 git clone <repo-url>
-cd blades-logger
+cd logger
 npm install
 ```
 
@@ -97,12 +97,6 @@ Types of interest:
 
 - `ILogEntry` { timestamp: Date; level: LogLevel; message: string; data?: any; source?: string }
 - `IAdvancedLogger` extends `ICoreLogger` with `getLogs()`, `clearLogs()`, `addEntry()`
-
----
-
-## Migration notes — legacy `configure()` behavior
-
-Older code or tests may call a `configure()` method with options named `enableConsoleOutput` and `enableLocalStorage`. A temporary compatibility shim exists inside `LoggingService` to map these legacy fields to the newer `initialize()` options (`enableConsoleCore`, `enableLocalStorageCore`). The shim is intended to ease migration and will be removed in a future major release. Please update code to call `initialize()` directly.
 
 ---
 
